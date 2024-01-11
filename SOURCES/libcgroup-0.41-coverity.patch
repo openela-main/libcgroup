@@ -1,0 +1,167 @@
+diff --git a/src/api.c b/src/api.c
+index 1cd30df..93d0750 100644
+--- a/src/api.c
++++ b/src/api.c
+@@ -3642,14 +3642,14 @@ static int cg_read_stat(FILE *fp, struct cgroup_stat *cgroup_stat)
+ 		ret = ECGINVAL;
+ 		goto out_free;
+ 	}
+-	strncpy(cgroup_stat->name, token, FILENAME_MAX);
++	strncpy(cgroup_stat->name, token, FILENAME_MAX - 1);
+ 
+ 	token = strtok_r(NULL, " ", &saveptr);
+ 	if (!token) {
+ 		ret = ECGINVAL;
+ 		goto out_free;
+ 	}
+-	strncpy(cgroup_stat->value, token, CG_VALUE_MAX);
++	strncpy(cgroup_stat->value, token, CG_VALUE_MAX - 1);
+ 
+ out_free:
+ 	free(line);
+@@ -3906,9 +3906,9 @@ int cgroup_get_controller_next(void **handle, struct cgroup_mount_point *info)
+ 		goto out_unlock;
+ 	}
+ 
+-	strncpy(info->name, cg_mount_table[*pos].name, FILENAME_MAX);
++	strncpy(info->name, cg_mount_table[*pos].name, FILENAME_MAX - 1);
+ 
+-	strncpy(info->path, cg_mount_table[*pos].mount.path, FILENAME_MAX);
++	strncpy(info->path, cg_mount_table[*pos].mount.path, FILENAME_MAX - 1);
+ 
+ 	(*pos)++;
+ 	*handle = pos;
+diff --git a/src/config.c b/src/config.c
+index e1ee0a8..c3004eb 100644
+--- a/src/config.c
++++ b/src/config.c
+@@ -168,7 +168,7 @@ int config_insert_cgroup(char *cg_name, int flag)
+ 	}
+ 
+ 	config_cgroup = &config_table[*table_index];
+-	strncpy(config_cgroup->name, cg_name, FILENAME_MAX);
++	strncpy(config_cgroup->name, cg_name, FILENAME_MAX - 1);
+ 
+ 	/*
+ 	 * Since this will be the last part to be parsed.
+@@ -1583,7 +1583,7 @@ int cgroup_config_create_template_group(struct cgroup *cgroup,
+ 	int i, j, k;
+ 	struct cgroup *t_cgroup;
+ 	char buffer[FILENAME_MAX];
+-	struct cgroup *aux_cgroup;
++	struct cgroup *aux_cgroup = NULL;
+ 	struct cgroup_controller *cgc;
+ 	int found;
+ 
+@@ -1659,7 +1659,7 @@ int cgroup_config_create_template_group(struct cgroup *cgroup,
+ 		/* no template is present for given name x controller pair
+ 		 * add controller to result cgroup */
+ 		aux_cgroup = cgroup_new_cgroup(cgroup->name);
+-		if (aux_cgroup) {
++		if (aux_cgroup == NULL) {
+ 			ret = ECGINVAL;
+ 			fprintf(stderr, "cgroup %s can't be created\n",
+ 				cgroup->name);
+@@ -1683,5 +1683,6 @@ int cgroup_config_create_template_group(struct cgroup *cgroup,
+ 	}
+ 
+ end:
++	cgroup_free(&aux_cgroup);
+ 	return ret;
+ }
+diff --git a/src/tools/cgsnapshot.c b/src/tools/cgsnapshot.c
+index a0599c1..66e3bbc 100644
+--- a/src/tools/cgsnapshot.c
++++ b/src/tools/cgsnapshot.c
+@@ -428,6 +428,7 @@ static int display_cgroup_data(struct cgroup *group,
+ 				goto err;
+ 			}
+ 			fprintf(of, "\t\t%s=\"%s\";\n", output_name, value);
++			free(value);
+ 		}
+ 		fprintf(of, "\t}\n");
+ 	}
+diff --git a/src/wrapper.c b/src/wrapper.c
+index 0952823..599128f 100644
+--- a/src/wrapper.c
++++ b/src/wrapper.c
+@@ -48,7 +48,7 @@ struct cgroup *cgroup_new_cgroup(const char *name)
+ 		return NULL;
+ 
+ 	init_cgroup(cgroup);
+-	strncpy(cgroup->name, name, sizeof(cgroup->name));
++	strncpy(cgroup->name, name, sizeof(cgroup->name) - 1);
+ 
+ 	return cgroup;
+ }
+@@ -82,7 +82,7 @@ struct cgroup_controller *cgroup_add_controller(struct cgroup *cgroup,
+ 	if (!controller)
+ 		return NULL;
+ 
+-	strncpy(controller->name, name, sizeof(controller->name));
++	strncpy(controller->name, name, sizeof(controller->name) - 1);
+ 	controller->cgroup = cgroup;
+ 	controller->index = 0;
+ 
+@@ -560,7 +560,7 @@ struct cgroup *create_cgroup_from_name_value_pairs(const char *name,
+ 			goto scgroup_err;
+ 		}
+ 
+-		strncpy(con, name_value[i].name, FILENAME_MAX);
++		strncpy(con, name_value[i].name, FILENAME_MAX - 1);
+ 		strtok(con, ".");
+ 
+ 		/* find out whether we have to add the controller or
+diff --git a/tests/libcgrouptest01.c b/tests/libcgrouptest01.c
+index acc229a..d7770a0 100644
+--- a/tests/libcgrouptest01.c
++++ b/tests/libcgrouptest01.c
+@@ -60,11 +60,11 @@ int main(int argc, char *argv[])
+ 	if (fs_mounted) {
+ 		ctl1 = atoi(argv[2]);
+ 		ctl2 = atoi(argv[3]);
+-		strncpy(mountpoint, argv[4], sizeof(mountpoint));
++		strncpy(mountpoint, argv[4], sizeof(mountpoint) - 1);
+ 		cgroup_dbg("C:DBG: mountpoint1 as recieved from script=%s\n",
+ 								 mountpoint);
+ 		if (fs_mounted == FS_MULTI_MOUNTED) {
+-			strncpy(mountpoint2, argv[5], sizeof(mountpoint2));
++			strncpy(mountpoint2, argv[5], sizeof(mountpoint2) - 1);
+ 			cgroup_dbg("C:DBG: mountpoint2 as recieved from "
+ 					"script=%s\n", mountpoint2);
+ 		}
+diff --git a/tests/read_stats.c b/tests/read_stats.c
+index a1bc244..0583039 100644
+--- a/tests/read_stats.c
++++ b/tests/read_stats.c
+@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
+ 	}
+ 
+ 	root_len = strlen(info.full_path) - 1;
+-	strncpy(cgroup_path, info.path, FILENAME_MAX);
++	strncpy(cgroup_path, info.path, FILENAME_MAX - 1);
+ 	ret = read_stats(cgroup_path, controller);
+ 	if (ret < 0)
+ 		exit(EXIT_FAILURE);
+@@ -72,7 +72,7 @@ int main(int argc, char *argv[])
+ 			ECGEOF) {
+ 		if (info.type != CGROUP_FILE_TYPE_DIR)
+ 			continue;
+-		strncpy(cgroup_path, info.full_path + root_len, FILENAME_MAX);
++		strncpy(cgroup_path, info.full_path + root_len, FILENAME_MAX - 1);
+ 		strcat(cgroup_path, "/");
+ 		ret = read_stats(cgroup_path, controller);
+ 		if (ret < 0)
+diff --git a/tests/test_functions.c b/tests/test_functions.c
+index 8f1d59e..f357ab2 100644
+--- a/tests/test_functions.c
++++ b/tests/test_functions.c
+@@ -139,7 +139,7 @@ struct cgroup *create_new_cgroup_ds(int ctl, const char *grpname,
+ 	char group[FILENAME_MAX];
+ 	char controller_name[FILENAME_MAX], control_file[FILENAME_MAX];
+ 
+-	strncpy(group, grpname, sizeof(group));
++	strncpy(group, grpname, sizeof(group) - 1);
+ 	retval = set_controller(ctl, controller_name, control_file);
+ 	if (retval) {
+ 		fprintf(stderr, "Setting controller failled\n");
